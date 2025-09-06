@@ -1,0 +1,8 @@
+# Ignorar base de datos
+olist.db
+
+# Ignorar carpeta dataset y todo su contenido
+dataset/
+
+# Ignorar cachés de pytest
+.pytest_cache/
