@@ -140,7 +140,24 @@ def query_real_vs_estimated_delivered_time(database: Engine) -> QueryResult:
 
 
 def query_freight_value_weight_relationship(database: Engine) -> QueryResult:
-    """Get the freight_value weight relation for delivered orders."""
+    """Get the freight_value weight relation for delivered orders.
+
+    In this particular query, we want to evaluate if exists a correlation between
+    the weight of the product and the value paid for delivery.
+
+    We will use olist_orders, olist_order_items, and olist_products tables alongside
+    some Pandas magic to produce the desired output: A table that allows us to
+    compare the order total weight and total freight value.
+
+    Of course, you could also do this with pure SQL statements but we would like
+    to see if you've learned correctly the pandas' concepts seen so far.
+
+    Args:
+        database (Engine): Database connection.
+
+    Returns:
+        QueryResult: The query for freight_value vs weight data.
+    """
     query_name = QueryEnum.GET_FREIGHT_VALUE_WEIGHT_RELATIONSHIP.value
 
     # Get orders from olist_orders table
@@ -152,30 +169,37 @@ def query_freight_value_weight_relationship(database: Engine) -> QueryResult:
     # Get products from olist_products table
     products = read_sql("SELECT * FROM olist_products", database)
 
-    # --- TODO 1: merge tables (items + orders + products) ---
-    # Mantén solo columnas necesarias para evitar duplicados de info
-    data = (
-        items.merge(orders[["order_id", "order_status"]], on="order_id", how="inner")
-             .merge(products[["product_id", "product_weight_g"]], on="product_id", how="left")
-    )
+    # Fusionar las tablas items, orders y products usando 'order_id'/'product_id'
+    data = items.merge(orders, on='order_id').merge(products, on='product_id')
 
-    # --- TODO 2: filtrar pedidos entregados ---
-    delivered = data[data["order_status"] == "delivered"].copy()
+    # Obtener solo los pedidos entregados
+    delivered = data[data['order_status'] == 'delivered']
 
-    # Evita NaN en peso para la suma
-    delivered["product_weight_g"] = delivered["product_weight_g"].fillna(0)
-
-    # --- TODO 3: agregar por order_id (sumas de freight_value y product_weight_g) ---
-    aggregations = (
-        delivered.groupby("order_id", as_index=False)
-                 .agg(freight_value=("freight_value", "sum"),
-                      product_weight_g=("product_weight_g", "sum"))
-    )
+    # Obtener la suma de freight_value y product_weight_g por cada order_id
+    aggregations = delivered.groupby('order_id').agg({
+        'freight_value': 'sum',
+        'product_weight_g': 'sum'
+    }).reset_index()
 
     return QueryResult(query=query_name, result=aggregations)
 
+
 def query_orders_per_day_and_holidays_2017(database: Engine) -> QueryResult:
-    """Get the query for orders per day and holidays in 2017."""
+    """Get the query for orders per day and holidays in 2017.
+
+    In this query, we want to get a table with the relation between the number
+    of orders made on each day and also information that indicates if that day was
+    a Holiday.
+
+    Of course, you could also do this with pure SQL statements but we would like
+    to see if you've learned correctly the pandas' concepts seen so far.
+
+    Args:
+        database (Engine): Database connection.
+
+    Returns:
+        Query: The query for orders per day and holidays in 2017.
+    """
     query_name = QueryEnum.ORDERS_PER_DAY_AND_HOLIDAYS_2017.value
 
     # Reading the public holidays from public_holidays table
@@ -184,36 +208,23 @@ def query_orders_per_day_and_holidays_2017(database: Engine) -> QueryResult:
     # Reading the orders from olist_orders table
     orders = read_sql("SELECT * FROM olist_orders", database)
 
-    # --- TODO 1: convertir a datetime ---
-    orders["order_purchase_timestamp"] = pd.to_datetime(
-        orders["order_purchase_timestamp"], errors="coerce"
-    )
+    # Convertir la columna order_purchase_timestamp a tipo datetime
+    orders["order_purchase_timestamp"] = pd.to_datetime(orders["order_purchase_timestamp"])
 
-    # --- TODO 2: filtrar solo 2017 ---
-    filtered_dates = orders[orders["order_purchase_timestamp"].dt.year == 2017].copy()
+    # Filtrar solo las fechas de compra de pedidos del año 2017
+    filtered_dates = orders[orders["order_purchase_timestamp"].dt.year == 2017]
 
-    # --- TODO 3: contar pedidos por día ---
-    # Serie con índice=fecha (date) y valor=cantidad
-    order_purchase_ammount_per_date = (
-        filtered_dates["order_purchase_timestamp"].dt.date.value_counts().sort_index()
-    )
+    # Contar la cantidad de pedidos por día
+    order_purchase_ammount_per_date = filtered_dates.groupby(filtered_dates["order_purchase_timestamp"].dt.date).size()
 
-    # --- TODO 4: construir DataFrame final con flag de festivo ---
-    # Normaliza columna 'date' de holidays a tipo date
-    if "date" in holidays.columns:
-        holidays["date"] = pd.to_datetime(holidays["date"], errors="coerce").dt.date
-    else:
-        # Por si la tabla usa otra capitalización
-        holidays.columns = [c.lower() for c in holidays.columns]
-        holidays["date"] = pd.to_datetime(holidays["date"], errors="coerce").dt.date
+    # Crear un DataFrame con el resultado
+    result_df = pd.DataFrame({
+        'date': order_purchase_ammount_per_date.index,
+        'order_count': order_purchase_ammount_per_date.values
+    })
 
-    result_df = pd.DataFrame(
-        {
-            "date": order_purchase_ammount_per_date.index,
-            "order_count": order_purchase_ammount_per_date.values,
-        }
-    )
-    result_df["holiday"] = result_df["date"].isin(holidays["date"])
+    # Añadir columna de festivos
+    result_df['holiday'] = result_df['date'].isin(holidays['date'])
 
     return QueryResult(query=query_name, result=result_df)
 

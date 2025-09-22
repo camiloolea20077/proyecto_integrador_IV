@@ -1,26 +1,22 @@
-WITH delivered_orders AS (
-  SELECT o.order_id
-  FROM olist_orders o
-  WHERE o.order_status = 'delivered'
-    AND o.order_delivered_customer_date IS NOT NULL
-),
-items_cat AS (
-  SELECT
-    oi.order_id,
-    t.product_category_name_english AS Category,
-    oi.price
-  FROM olist_order_items oi
-  JOIN olist_products pr ON pr.product_id = oi.product_id
-  LEFT JOIN product_category_name_translation t
-         ON t.product_category_name = pr.product_category_name
-  JOIN delivered_orders d ON d.order_id = oi.order_id
-  WHERE t.product_category_name_english IS NOT NULL
-)
+
 SELECT
-  Category,
-  COUNT(DISTINCT order_id) AS Num_order,
-  ROUND(SUM(price), 2) AS Revenue
-FROM items_cat
-GROUP BY Category
-ORDER BY Revenue ASC, Category ASC
+    olist_products.product_category_name AS Category,  -- Nombre de la categorÃ­a
+    COUNT(DISTINCT olist_orders.order_id) AS Num_order,  -- NÃºmero de pedidos Ãºnicos por categorÃ­a
+    SUM(olist_order_payments.payment_value) AS Revenue  -- Ingreso total por categorÃ­a
+FROM
+    olist_orders
+JOIN
+    olist_order_items ON olist_orders.order_id = olist_order_items.order_id
+JOIN
+    olist_products ON olist_order_items.product_id = olist_products.product_id
+JOIN
+    olist_order_payments ON olist_orders.order_id = olist_order_payments.order_id
+WHERE
+    olist_orders.order_status = 'delivered'
+    AND olist_products.product_category_name IS NOT NULL
+    AND olist_orders.order_delivered_customer_date IS NOT NULL
+GROUP BY
+    olist_products.product_category_name
+ORDER BY
+    Revenue ASC  -- Ordenar de menor a mayor por ingresos
 LIMIT 10;

@@ -1,27 +1,37 @@
-WITH order_revenue AS (
-  SELECT
-    o.order_id,
-    o.order_purchase_timestamp AS purchase_date,
-    SUM(p.payment_value) AS revenue
-  FROM olist_orders o
-  JOIN olist_order_payments p ON p.order_id = o.order_id
-  WHERE o.order_status = 'delivered'
-    AND o.order_delivered_customer_date IS NOT NULL
-  GROUP BY o.order_id, o.order_purchase_timestamp
-),
-months(month_no, month) AS (
-  SELECT '01','Jan' UNION ALL SELECT '02','Feb' UNION ALL SELECT '03','Mar' UNION ALL SELECT '04','Apr'
-  UNION ALL SELECT '05','May' UNION ALL SELECT '06','Jun' UNION ALL SELECT '07','Jul' UNION ALL SELECT '08','Aug'
-  UNION ALL SELECT '09','Sep' UNION ALL SELECT '10','Oct' UNION ALL SELECT '11','Nov' UNION ALL SELECT '12','Dec'
+WITH monthly_revenue AS (
+    SELECT
+        strftime('%m', order_purchase_timestamp) AS month_no,
+        strftime('%Y', order_purchase_timestamp) AS year,
+        SUM(payment_value) AS total_revenue
+    FROM
+        olist_order_payments
+    JOIN
+        olist_orders ON olist_order_payments.order_id = olist_orders.order_id
+    GROUP BY
+        month_no, year
 )
 SELECT
-  m.month_no,
-  m.month,
-  COALESCE(SUM(CASE WHEN CAST(strftime('%Y', r.purchase_date) AS INTEGER) = 2016 THEN r.revenue END), 0.0) AS Year2016,
-  COALESCE(SUM(CASE WHEN CAST(strftime('%Y', r.purchase_date) AS INTEGER) = 2017 THEN r.revenue END), 0.0) AS Year2017,
-  COALESCE(SUM(CASE WHEN CAST(strftime('%Y', r.purchase_date) AS INTEGER) = 2018 THEN r.revenue END), 0.0) AS Year2018
-FROM months m
-LEFT JOIN order_revenue r
-  ON printf('%02d', CAST(strftime('%m', r.purchase_date) AS INTEGER)) = m.month_no
-GROUP BY m.month_no, m.month
-ORDER BY CAST(m.month_no AS INTEGER);
+    month_no,
+    CASE month_no
+        WHEN '01' THEN 'Jan'
+        WHEN '02' THEN 'Feb'
+        WHEN '03' THEN 'Mar'
+        WHEN '04' THEN 'Apr'
+        WHEN '05' THEN 'May'
+        WHEN '06' THEN 'Jun'
+        WHEN '07' THEN 'Jul'
+        WHEN '08' THEN 'Aug'
+        WHEN '09' THEN 'Sep'
+        WHEN '10' THEN 'Oct'
+        WHEN '11' THEN 'Nov'
+        WHEN '12' THEN 'Dec'
+    END AS month,
+    COALESCE(SUM(CASE WHEN year = '2016' THEN total_revenue END), 0.00) AS Year2016,
+    COALESCE(SUM(CASE WHEN year = '2017' THEN total_revenue END), 0.00) AS Year2017,
+    COALESCE(SUM(CASE WHEN year = '2018' THEN total_revenue END), 0.00) AS Year2018
+FROM
+    monthly_revenue
+GROUP BY
+    month_no
+ORDER BY
+    month_no;
