@@ -1,10 +1,14 @@
 version: "3"
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.4-python3.10
+  build:
+    context: .
+    dockerfile: Dockerfile
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ""
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -12,15 +16,12 @@ x-airflow-common: &airflow-common
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
-    - ./requirements.txt:/requirements.txt
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
-  command: >
-    bash -c "pip install --no-cache-dir -r /requirements.txt &&
-            airflow db migrate &&
-            airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
-            exec airflow webserver"
   depends_on:
-    - postgres
+    postgres:
+      condition: service_healthy
 
 services:
   postgres:
@@ -31,23 +32,59 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+    ports:
+      - "5432:5432"
 
   airflow-init:
     <<: *airflow-common
-    command: bash -c "pip install -r /requirements.txt && airflow db init && airflow users create --username admin --firstname admin --lastname user --role Admin --email admin@example.com --password admin"
-    restart: "no"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin || true
+        echo "Airflow initialization completed successfully!"
+    restart: "on-failure"
 
   webserver:
     <<: *airflow-common
-    command: bash -c "pip install -r /requirements.txt && airflow webserver"
+    command: airflow webserver
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
   scheduler:
     <<: *airflow-common
-    command: bash -c "pip install -r /requirements.txt && airflow scheduler"
+    command: airflow scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres-db-volume:
