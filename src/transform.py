@@ -7,7 +7,7 @@ from pandas import DataFrame, read_sql
 from sqlalchemy import text
 from sqlalchemy.engine.base import Engine
 
-from src.config import QUERIES_ROOT_PATH
+from config import QUERIES_ROOT_PATH
 
 QueryResult = namedtuple("QueryResult", ["query", "result"])
 

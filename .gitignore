@@ -3,3 +3,4 @@ dataset/
 olist.db
 .pytest_cache
 venv/
+logs/

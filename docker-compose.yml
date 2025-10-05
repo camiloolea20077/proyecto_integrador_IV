@@ -18,6 +18,8 @@ x-airflow-common: &airflow-common
     - ./src:/opt/airflow/src
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
+    - ./dataset:/opt/airflow/dataset
+    - ./queries:/opt/airflow/queries
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:
